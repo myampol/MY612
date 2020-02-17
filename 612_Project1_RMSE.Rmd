@@ -1,0 +1,361 @@
+---
+title: "DATA612-Project1-Baseline-RMSE"
+author: "Michael Y."
+date: "2/17/2020"
+subtitle: "calculate statistics on a user-item ratings matrix"
+output:
+  pdf_document:
+    md_extensions: +grid_tables
+    toc: yes
+    toc_depth: 3
+    keep_md: yes
+    keep_tex: yes
+  html_document:
+    highlight: pygments
+    theme: cerulean
+    code_folding: show
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    keep_md: yes
+    md_extensions: +grid_tables
+urlcolor: blue
+linkcolor: blue
+editor_options:
+  chunk_output_type: inline
+header-includes: 
+- \usepackage{graphicx}
+- \usepackage{float}
+- \usepackage{pdflscape}
+- \newcommand{\blandscape}{\begin{landscape}}
+- \newcommand{\elandscape}{\end{landscape}}
+---
+---
+
+<style>
+  .main-container {
+    max-width: 1300px !important;
+  }
+</style>
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits=7,scipen=999,width=130)
+directory = "C:/Users/Michael/Dropbox/priv/CUNY/MSDS/202002-Spring/DATA612_Latif/612_20200217_Project1_Predictors_RMSE"
+knitr::opts_knit$set(root.dir = directory)
+```
+
+\newpage
+```{r libraries}
+library(tidyverse)
+library(kableExtra)
+library(RMySQL)
+```
+
+\newpage
+# Project 1 - Global Baseline Predictors and RMSE
+
+
+## • Briefly describe the recommender system that you’re going to build out from a business perspective, e.g. “This system recommends data science books to readers.”
+
+This system recommends recent movies to viewers.   
+
+```{r 612-HW1a}
+
+
+```
+
+## • Find a dataset, or build out your own toy dataset. As a minimum requirement for complexity, please include numeric ratings for at least five users, across at least five items, with some missing data.
+
+For our dataset, we will use the same ratings shown in the youtube playlist of videos that we were asked to watch.   This will enable easy verification of the correctness of our figures at each step.
+
+While the videos assumed that there were 6 users and 5 movies, here we will treat the data as 6 movies rated by 5 users.
+
+I've loaded up the list of users, the list of movies, and their ratings into a MYSQL database.
+
+The next step extracts the data into a "long" dataframe.
+
+### Connect to the MySql database and retrieve the data:
+
+```{r 612-HW1b-get-the-data, eval=TRUE}
+
+# I created "stduser" as a read-only account in my database which only has "select" privilege
+connstd <- dbConnect(MySQL(), user="stduser", password="password", 
+                     dbname="Proj1_Movies", host="localhost")
+
+# Create a query which joins the 3 database tables, 
+# replacing the auto-generated ID codes with the movie names and the reviewers' names
+
+query <- 'Select M.Movie_title, F.Friend_name, R.Rating
+          From Movies as M, Friends as F, Ratings as R
+          Where (M.Movie_id = R.Movie_ID AND F.Friend_id = R.Friend_ID);'
+
+# Execute the query
+results <- dbGetQuery(connstd, query)
+
+# Close the database connection
+discard <- dbDisconnect(connstd) # this function returns "TRUE", so assignment suppresses printing
+```
+
+
+
+\newpage
+## • Load your data into (for example) an R or pandas dataframe, a Python dictionary or list of lists, (or another data structure of your choosing). 
+
+#### The raw data:
+```{r 612-HW1b-look-at-the-data,eval=T}
+results %>% kable() %>%  kable_styling(c("striped", "bordered"))
+```
+
+#### The dimensions of the results dataframe are (`r dim(results)`) .
+
+\newpage
+#### Structure and Summary of the results dataframe:
+```{r 612-HW1b-dataframe-structure}
+### Structure
+str(results)
+
+### Summary
+summary(results)
+```
+
+
+
+\newpage
+## • From there, create a user-item matrix.
+
+We use `pivot_wider` to convert the above format into a table with 6 rows and 5 columns.
+
+```{r 612-HW1c}
+
+#### use pivot_wider to make a User-Item (UI) matrix
+results %>% pivot_wider(names_from = Friend_name, values_from = Rating) -> UI
+UI
+
+#### movie_title is still a column -- make it rownames instead
+UI  %>% column_to_rownames("Movie_title") -> UI
+UI
+
+### corresponds to the ratings in video J
+```
+
+
+
+\newpage
+## • If you choose to work with a large dataset, you’re encouraged to also create a small, relatively dense “user-item” matrix as a subset so that you can hand-verify your calculations.
+
+```{r 612-HW1d}
+### check the rowMeans (note- this is the entire dataset - we will exclude test next)
+rowMeans(UI,na.rm = T) %>% t %>% t
+
+### check the colMeans (note- this is the entire dataset - we will exclude test next)
+colMeans(UI,na.rm=T)
+
+```
+
+
+\newpage
+## • Break your ratings into separate training and test datasets.
+
+Because in this example we are trying to match the values displayed in the video playlist, we have to select the same cases for the training and test sets as the selection made in the online videos.    
+
+Accordingly, we will make a matrix of ones and zeros which will facilitate extracting the desired elements from the overall matrix.   
+The original dataset contained 30 possible values, but 5 of those were NA.   
+
+The train/test split is 80/20, with 20 elements remaining in the training dataset and 5 elements removed to the test dataset.
+
+Going forward, we would use a random number generator to make random selections of these elements.
+
+### Test dataset:
+
+```{r 612-HW1e-test}
+test_extractor = matrix(
+  data = c(
+  0,0,0,0,0,
+  0,0,0,1,0,
+  1,0,0,0,0,
+  0,1,0,0,0,
+  0,0,1,0,0,
+  0,0,0,0,1
+  ),
+  nrow=6,
+  ncol=5,
+  byrow = T)
+  
+test_extractor  
+## multiply the test_extractor by the User-Item-Matrix (element by element -- not matrix multplication)
+UI_test <- test_extractor * UI
+#UI_test
+## set the zeroes to "NA" for the test matrix
+UI_test[UI_test==0]<-NA
+
+### convert from dataframe to matrix
+UI_test <- as.matrix(UI_test)
+
+### display UI_test
+UI_test %>% kable(caption = "*USER-ITEM TEST MATRIX*") %>%   kable_styling(c("bordered","striped"))
+
+### corresponds to the "blue" values in video J
+```
+
+\newpage
+### Training dataset:
+
+```{r 612-HW1e-train}
+### Define the Training extractor as 1 minus the test extractor
+train_extractor = 1 - test_extractor
+train_extractor
+
+
+## multiply the train_extractor by the User-Item-Matrix (element by element -- not matrix multplication)
+UI_train <- train_extractor * UI
+## set the zeroes to "NA" for the train matrix
+UI_train[UI_train==0]<-NA
+
+### convert from dataframe to matrix
+UI_train <- as.matrix(UI_train)
+
+### UI_train
+UI_train %>% kable(caption = "*USER-ITEM TRAINING MATRIX*") %>%   kable_styling(c("bordered","striped"))
+
+### corresponds to the "black" values in video K
+```
+
+
+\newpage
+## • Using your training data, calculate the raw average (mean) rating for every user-item combination.
+
+```{r 612-HW1f}
+mean_value <- mean(UI_train, na.rm = T)
+mean_value
+
+## value 3.5 corresponds to the result in video K
+
+### make a matrix with same rownames and colnames as UI_train, but replace the values
+mean_rating <- UI_train
+mean_rating[T] <- mean_value
+mean_rating  %>% kable(caption = "*MEAN-RATING MATRIX*") %>%   kable_styling(c("bordered","striped"))
+```
+
+
+\newpage
+## • Calculate the RMSE for raw average for both your training data and your test data.
+
+```{r 612-HW1g}
+
+### Training RMSE 
+train_RMSE_raw <- sqrt( mean ( (UI_train - mean_rating)^2, na.rm=T ) )
+train_RMSE_raw
+
+## 1.1619 cooresponds to the result in video L
+
+### Test RMSE 
+test_RMSE_raw <- sqrt( mean ( (UI_test - mean_rating)^2, na.rm=T ) )
+test_RMSE_raw
+
+## 1.0247 cooresponds to the result in video L
+
+```
+
+
+\newpage
+## • Using your training data, calculate the bias for each user and each item.
+
+```{r 612-HW1h}
+
+### User Bias
+user_bias <- colMeans(UI_train,na.rm = T) - mean_value
+user_bias %>% t %>% t  %>% kable(caption = "USER BIAS") %>%   kable_styling(c("bordered","striped"))
+
+# results correspond to the columns in video N
+
+
+### Item (movie) bias
+movie_bias <- rowMeans(UI_train,na.rm = T) - mean_value
+movie_bias %>% t %>% t  %>% kable(caption = "MOVIE (item) BIAS") %>%   kable_styling(c("bordered","striped"))
+
+# results correspond to the rows in video N
+```
+
+
+\newpage
+## • From the raw average, and the appropriate user and item biases, calculate the baseline predictors for every user-item combination.
+
+```{r 612-HW1i}
+### start from the matrix of the mean_rating
+baseline_predictor <- mean_rating
+
+minrating = 1
+maxrating = 5
+for (r in 1:nrow(baseline_predictor))
+  for (c in 1:ncol(baseline_predictor))
+    baseline_predictor[r,c] <- 
+  ### We have to ensure that the results are in the range [minrating,maxrating]
+  ### which is why we have the min(max()) wrapper
+  min(
+    max(
+      baseline_predictor[r,c] + movie_bias[r] + user_bias[c],
+      1),
+    5)
+     
+baseline_predictor
+
+## matches the table in video "O"
+
+```
+
+
+\newpage
+## • Calculate the RMSE for the baseline predictors for both your training data and your test data.
+
+```{r 612-HW1j}
+### Training RMSE 
+train_RMSE_baseline <- sqrt( mean ( (UI_train-baseline_predictor)^2, na.rm=T ) )
+train_RMSE_baseline
+
+## 0.4709 matches the TRAINING RMSE value in video "P"
+
+### Test RMSE 
+test_RMSE_baseline <- sqrt( mean ( (UI_test-baseline_predictor)^2, na.rm=T ) )
+test_RMSE_baseline
+
+## 0.7365 matches the TEST RMSE value in video "P"
+
+```
+
+\newpage
+## • Summarize your results.
+
+```{r 612-HW1k}
+
+### improvement in TRAIN RMSE when moving from raw average to baseline predictor
+train_RMSE_improvement = 1 - train_RMSE_baseline/ train_RMSE_raw
+train_RMSE_improvement
+
+### improvement in TEST RMSE when moving from raw average to baseline predictor
+test_RMSE_improvement  = 1 - test_RMSE_baseline / test_RMSE_raw
+test_RMSE_improvement
+
+### Improvements match the results given in video "P"
+```
+
+The training RMSE declined from `r round(train_RMSE_raw,3)` to `r round(train_RMSE_baseline,3)`,
+which is an improvement of `r round(100*train_RMSE_improvement,3)` percent.
+
+The testing RMSE declined from `r round(test_RMSE_raw,3)` to `r round(test_RMSE_baseline,3)`,
+which is an improvement of `r round(100*test_RMSE_improvement,3)` percent.
+
+
+
+
+
+
+
+
+
+
+
+
+
