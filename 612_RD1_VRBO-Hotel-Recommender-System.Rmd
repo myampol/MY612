@@ -1,0 +1,293 @@
+---
+title: "VRBO Hotel Recommender System"
+author: "Michael Y."
+date: "2/20/2020"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+  html_document:
+    highlight: pygments
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+classoption: portrait
+editor_options:
+  chunk_output_type: inline
+header-includes: 
+- \usepackage{graphicx}
+- \usepackage{float}
+---
+
+<style>
+  .main-container {
+    max-width: 1200px !important;
+  }
+</style>
+---
+
+```{r setup, include=FALSE, warning=F, message=F}
+knitr::opts_chunk$set(echo = TRUE)
+mydir = "C:/Users/Michael/Dropbox/priv/CUNY/MSDS/202002-Spring/DATA612_Latif/612_20200220_ResearchDiscussionAssignment_1"
+setwd(mydir)
+knitr::opts_knit$set(root.dir = mydir)
+```
+
+# Research Discussion Assignment 1
+
+
+
+Please complete the research discussion assignment in a Jupyter or R Markdown notebook. You should post the GitHub link to your research in a new discussion thread.
+
+Now that we have covered basic techniques for recommender systems, choose one commercial recommender and describe how you think it works (content-based, collaborative filtering, etc). Does the technique deliver a good experience or are the recommendations off-target?
+
+You may also choose one of the three non-personalized recommenders (below) we went over in class and describe the technique and which of the three you prefer to use.    
+
+1. Metacritic:  How We Create the Metascore Magic    
+2. Rotten Tomatoes: About Rotten Tomatoes     
+3. IMDB: FAQ for IMDb Ratings     
+
+
+
+## Part 1: Recommender System VRBO 
+
+I've chosen to examine the Vacation property rental recommendation system implemented by data scientists at [VRBO](http://www.vrbo.com) ("Vacation Rental By Owner"), an affiliate of [HOMEAWAY](http://www.homeaway.com),  which is now part of the [Expedia](http://www.expedia.com) travel group. It appears that the usage of such engine extends across affiliated websites (e.g., the websites for *Homeaway* and *VRBO* appear to be nearly identical in format as well as content.)  Although there are also many similarities within the hotels booking section of their parent, *Expedia* (which also books flights, rental cars, etc.), here I will look just at the usage of this engine in the vacation rental market rather than the commercial hotel booking market.
+
+### Description
+**VRBO** and **Homeaway** connect property managers and homeowners with travelers who seek the space, value and amenities of vacation rental homes rather than hotels. In a sense, VRBO competes with **AirBnB**, but they view their target customers differently.  VRBO's branding is known for high-end vacation properties, often in luxury locations, where the customer gets the use of the entire property for the duration of his/her contract.  In contrast, AirBnB arranges for rentals of both entire properties as well as individual rooms within a homeowner's dwelling, e.g., where the homeowner may be providing Breakfast in addition to the Bed (thus, the "BnB" in their name.)
+
+#### Target users
+
+As such, for VRBO/Homeaway there are two sets of target users, each with differing needs and goals:
+
+1. Property managers and homeowners who seek to rent out their vacation homes to reputable guests.    
+
+2. Individuals who are interested in a private vacation rental rather than a hotel room.    
+
+Here are some excerpts from the HomeAway and VRBO websites which decribe their (now, united) mission:
+
+> "**HomeAway.com** connects property managers and homeowners with travelers who seek the space, value and amenities of vacation rental homes. The site has the largest and most diverse selection of homes around the world, with more than 1 million listings across 120 countries. By listing your properties on HomeAway you can take advantage of a global network of 50 sites, including VRBO, with over 750 million traveler visits each year. Property Managers can market to HomeAway's traveler audience via yearly subscriptions or via a pay-per-booking model. HomeAway's pricing models are flexible, allowing you to choose the listing option that meets your business needs, plus HomeAway offers discounts on bulk listing purchases. HomeAway's dedicated account management team is standing by to recommend strategies, maximize your marketing ROI, and help your business grow."
+
+> "In 1995, **VRBO** introduced a new way for people to travel together, pairing homeowners with families and friends looking for places to stay. We were grounded in one purpose: To give people the space they need to drop the distractions of everyday life and simply be together. Since then, we’ve grown into a global community of homeowners and travelers, with unique properties in 190 countries around the world. VRBO makes it easy and fun to book cabins, condos, beach houses and every kind of space in between.
+
+> VRBO is part of **Expedia Group** and offers homeowners and property managers exposure to over 750 million visits to Expedia Group sites each month."
+
+#### User Goals:
+
+As there are two sets of target users, each has a differing goal:   
+
+##### Homeowners
+
+1.  **Homeowners** seek to rent out their vacation home by listing it on various websites.  While the homeowner would like to obtain the highest possible rental rate which would be accepted by a renter, to optimize revenue, the homeowner would generally prefer to pay the lowest fees possible, both for listing the property as well as the customer bookings.  Additionally, the homeowner would generally prefer that their prospective renters be assessed the smallest possible fees by the intermediary.  As homeowners are competing with each other for priority in display of their listings, they seek optimal positioning of their property in front of users who are most likely to make a booking.
+
+###### When renting out a property, the owner/manager is naturally concerned about several risks:
+a. Is the guest reputable?  
+b. Will the guest be throwing a wild party at my property?  
+c. Will the guest cause damages which may exceed any damage deposit which I temporarily collect?
+d. Will the guest cause me embarrassment with regard to my neighbors?
+
+
+##### Prospective Renters
+2. The **prospective vacationer** seeks a property meeting various requirements, generally at the lowest possible price. In general, the renter seeks to pay the smallest possible fees to the intermediary.
+
+It can be much cheaper to stay in an apartment or home rented through an online service such as VRBO/HomeAway than a hotel. Not only that, you can often get a lot more room for your money, making these short-term rentals particularly cost effective for families. Plus, you’ll ordinarily have access to a kitchen of some type, so you can save money on eating at restaurants during your stay.
+
+###### Such customers are concerned about several risks:
+a. Is the property as advertised?  Are the photographs accurate?  Does the property have any defects which haven't been shared?
+b. Will the property actually be available at the time I show up for my reservation, and remain available for the agreed duration?
+c. Will I be safe at the property?
+d. Does the "owner" have the legal right to enter into this rental agreement?
+
+
+#### Renter's search
+
+##### I know where I'm going
+
+Among prospective renters, some users may ***already*** have a ***specific destination*** in mind, and are searching for an available property ***at a specific location***.  In this case, the system will present a set of properties which meet the user's search specifications.  However, the system's recommendation algorithm  will decide on which properties to present at the top of the list, making those the first items seen by the customer (unless the customer has specified a different sorting preference.)    
+
+##### Suggest where I should go
+
+However, other users ***may not yet have decided on a destination***.  The system has the opportunity to ***suggest a few potential destinations*** to the customer upon initial navigation to the website.  In such case, the system can ***recommend locations*** which may be of interest to the user.   If such a location results in the customer thinking "I haven't been there, this looks like a really {beautiful|interesting} place, why not take my next vacation to that place?"  the system has sold the customer on the macro perspective -- the destination.  Next it can pitch the customer on the micro perspective -- a specific booking at that destination.
+
+The website enables    
+
+(1) the owners of properties to find prospective renters who are interested in coming to their location and renting a vacation property, and    
+
+(2) vacationers can be guided toward various destinations of interest, and then offered listings of available vacation properties available for rent at such location.
+
+The recommendation algorithm ensures that owner's properties will be presented to prospective customers who may have an interest in such destination.  From the perspective of vacationers, the destinations and properties which are presented must be interesting to the user, who otherwise  may not select a booking from the website and may pursue alternatives elsewhere.   However, through a methodology known as "retargeting", the ecosystem retains the ability to recognize prospective customers who didn't make any booking, and targets them with advertisements (displayed on unrelated internet pages in their web browser or other interactive applications) to induce them to return to the website.
+
+### Reverse Engineering
+
+While other firms typically use **collaborative filtering** and/or  **content-based recommendation** settings. VRBO's recommendation engine differs in that it takes a hybrid approach which implements a **session-based local embedding model**.   This approach is based upon two stages:
+
+#### Stage 1: skip-gram sequence model 
+
+Train a [skip-gram sequence model](https://en.wikipedia.org/wiki/N-gram#Skip-gram) to capture a local embedding representation for each listing, then extrapolate latent embeddings for listings subject to the [Cold Start problem][Deferred Cold Start Link 1].
+
+```{r getskipgramimagefile, echo=F,warning=F,message=F}
+skipgramfilename = paste0('.', "/images/Skip-Gram.JPG")
+##!system(paste("ls -l ", skipgramfilename))
+```
+
+<center><img src=`r skipgramfilename` width='600'></center>
+*Source: Tomas Mikolov et.al., "Distributed Representations of Words and Phrases and their Compositionality",<https://arxiv.org/abs/1310.4546>*
+
+A [skip-gram](https://en.wikipedia.org/wiki/N-gram#Skip-gram) is an architecture for [word2vec](https://en.wikipedia.org/wiki/Word2vec) in which the model uses the current word to predict the surrounding window of context words, weighing nearby context words more heavily than more distant context words. 
+
+Here, the skip-gram model attempts to predict listings $x_i$ surrounded by listings $x_{i−c}$ and $x_{i+c}$ viewed in a traveler session $s_k$ , based on the premise that traveler’s view of listings in the same session signals the similarity of those listings.     
+The training objective is to find the listing local representation that specifies surrounding most similar manifold.
+
+Two key issues to address include **sparsity** and **heterogeneity in views** per item.    
+Especially frequent items are downsampled using the inverse square root of the frequency, and listings with extrermely low frequency are removed.   
+
+
+In this context, the [Cold Start problem][Deferred Cold Start Link 2] refers to the situation when newly added rental properties have recently been added to the system, but no (or, few) user interactions have occurred which would allow the system to learn about the property in order to recommend it.
+
+To resolve the [Cold Start problem][Deferred Cold Start Link 2], the contextual information that relates destinations (or search terms) to the listings based on the booking information is leveraged.  Given latitude and longitude of the cold listing (for which we have no data), a belief is formed about the proportion of demand driven from each of the search terms pertaining to related/nearby destinations.  Then the **destination embedding** from the earlier step is used to find the expected **listing embedding** for the cold listing.
+
+
+#### Stage 2:  Deep Average Network
+
+```{r getDANimagefile, echo=F,warning=F,message=F}
+DANfilename = paste0('.', "/images/DeepAverageNetwork.JPG")
+##!system(paste("ls -l ", DANfilename))
+```
+
+Train a [Deep Average Network (DAN)](https://mlexplained.com/2018/05/11/paper-dissected-deep-unordered-composition-rivals-syntactic-methods-for-text-classification-explained/) 
+stacked with *decoder and encoder layers* predicting purchase events to capture a given traveler’s embedding, or latent preference for listings embedding.
+
+<center><img src=`r DANfilename` width='600'></center>
+*Source: Tomas Mikolov, "Efficient Estimation of Word Representations in Vector Space", <https://arxiv.org/abs/1301.3781>*
+
+In the second stage, given the **listing’s embedding** from the previous stage we model **traveler embeddings** using a sandwiched encoder-decoder non-linear Relu function.     
+In contrast to relatively weak implicit view signals, in this stage we leverage strong booking signals as a target variable based on **historical traveler listing interaction**.
+The **adaptive stochastic gradient descent method** is used to train the binary cross entropy of the neural networks.
+
+The final question to answer is how to combine the **traveler** and **listing embedding** for **personalized recommendations.**   
+This is a particularly challenging task as traveler embeddings is **non-linear projection** of listings embedding with a **different dimension.** 
+As a result, they are not in the same space to compute cosine similarity.
+(The authors defer discussion of this approach to their subsequent study.)
+
+
+
+#### Followup: Re-targeting
+
+Additionally, VRBO can draw users to its website by bidding for advertisements when users are engaged in other activities in a web browser.  For prospective customers who have previously visited the site, but perhaps didn't purchase anything, VRBO can "retarget" them by displaying advertisements which are most likely to draw their interest.
+
+Here is an illustration of the concept:
+```{r getRetargetimagefile, echo=F,warning=F,message=F}
+Retargetfilename = paste0('.', "/images/Retargeting.JPG")
+#!system(paste("ls -l ", Retargetfilename))
+```
+
+<center><img src=`r Retargetfilename` width='600'></center>
+*Source: Meisam HejaziNia et al., "Slide deck: Deep Personalized Retargeting”, <https://www.slideshare.net/MeisamHejaziNia/readnet-vrbo-deep-personalized-retargeting-2>*
+
+
+
+Such *Deep Personalized Re-targeting* is detailed in a [paper](https://arxiv.org/pdf/1907.02822.pdf) 
+and explained in a 
+[companion slide deck](https://www.slideshare.net/MeisamHejaziNia/readnet-vrbo-deep-personalized-retargeting-2) .
+
+
+Here is an illustration of their process:
+```{r getDPRTimagefile, echo=F,warning=F,message=F}
+DPRTfilename = paste0('.', "/images/Deep-Personalized-Retargeting-System.JPG")
+##!system(paste("ls -l ", DPRTfilename))
+```
+
+<center><img src=`r DPRTfilename` width='600'></center>
+*Source: Meisam HejaziNia et al., “Deep Personalized Retargeting”, <https://arxiv.org/pdf/1907.02822>*
+
+
+
+#### Recommendations for Improvement
+
+One problem that the developers face is that in **Session-based recommenders**, recommendations are provided based only on the visitor’s interactions in the *current* session.  The goal is to propagate signals from "recent" sessions to the current one, for example by use of "cookies."
+
+The developers indicated that they are implementing a Hierarchical Recurrent Neural Network (HRNN) to improve their model.   In short, the HRNN learns a representation embedding from “recent” sessions to inform the current
+one.  For example, if you’re planning for a ski holiday, you have probably searched in previous recent
+sessions for hotels in places such as French Alps, and viewed hotels in ski areas. So, the algorithm would boost hotels in ski areas in the current session.
+
+Here is an illustration of such architecture:
+
+```{r getHRNNimagefile, echo=F,warning=F,message=F}
+HRNNfilename = paste0('.', "/images/HRNN.JPG")
+##!system(paste("ls -l ", HRNNfilename))
+```
+
+<center><img src=`r HRNNfilename` width='600'></center>
+*Source: Massimo Quadrana et al., "Personalizing Session-based Recommendations with Hierarchical Recurrent Neural Networks", <https://arxiv.org/abs/1706.04148>*
+
+
+
+#### References
+
+Meisam HejaziNia et al., "Deep Personalized Retargeting", <https://arxiv.org/pdf/1907.02822.pdf>
+
+Meisam HejaziNia et al., “Slide deck: Deep Personalized Retargeting”, available at <https://www.slideshare.net/MeisamHejaziNia/readnet-vrbo-deep-personalized-retargeting-2>
+
+Tomas Mikolov et al., "Efficient Estimation of Word Representations in Vector Space", <https://arxiv.org/abs/1301.3781>
+
+Tomas Mikolov et al., "Distributed Representations of Words and Phrases and their Compositionality", <https://arxiv.org/abs/1310.4546>
+
+Pavlos Mitsoulis-Ntompos et al., "A Simple Deep Personalized Recommendation System", <https://arxiv.org/abs/1906.11336>
+
+Pavlos Mitsoulis-Ntompos, "Build a Hotel Recommender using Amazon Personalize - No PhD Required", slide deck from talk delivered at AWS Machine Learning Web Day, Nov 6, 2019
+
+Massimo Quadrana et al., "Personalizing Session-based Recommendations with Hierarchical Recurrent Neural Networks", <https://arxiv.org/abs/1706.04148>
+
+[Deferred Cold Start Link 1]: https://en.wikipedia.org/wiki/Cold_start_(computing)
+[Deferred Cold Start Link 2]: https://en.wikipedia.org/wiki/Cold_start_(computing)#New_item
+
+## Part 2 - Attacks on Recommender System
+
+Read the article below and consider how to handle attacks on recommender systems.   
+
+[Travis M. Andrews, The Washington Post (2017): Wisdom of the crowd? IMDb users gang up on Christian Bale’s new movie before it even opens.](https://www.washingtonpost.com/news/morning-mix/wp/2017/04/19/wisdom-of-the-crowd-imdb-users-gang-up-on-the-promise-before-it-even-opens/?utm_term=.757fa312001d)
+
+##### Can you think of a similar example where a collective effort to alter the workings of content recommendations have been successful? 
+
+Customer reviews have become the life-blood for countless businesses.  A favorable rating on a site like <yelp.com> can translate into more business, with studies estimating that each one-star increment translates to an increase of 5 to 9 percent in revenue:
+
+https://www.hbs.edu/faculty/Pages/item.aspx?num=41233
+
+The lucrativeness of this impact has caused some businesses to arrange for "fake reviews" which improve their own ratings or disparage competitors.   Collaborative Filtering-based recommender systems are most at risk for such attacks.
+
+The same Harvard author subsequently noted that a sizable percentage of online reviews are classified as fake:
+
+https://dash.harvard.edu/bitstream/handle/1/22836596/luca,zervas_fake-it-till-you-make-it.pdf
+
+One term for this activity is "review bombing", where a coordinated attack produces a flurry of negative reviews, adversely impacting the target.  Here is an article discussing this phenomenon: 
+
+https://storyful.com/resources/blog/review-bombing/
+
+As examples, it describes similar attacks on films such as "Captain Marvel" and on books written by Hillary Clinton and Megyn Kelly.
+
+Another blog from a small-business owner describes the sudden appearence of hundreds of one-star reviews (none of which had any textual comments) and the difficulty of getting the social media site to remove them:
+https://www.fastcomet.com/blog/250-1-star-reviews-twice
+
+Such attacks can either be the work of a direct competitor, a disgruntled ex-employee, or the collective followers of a prominent person, who may use social media influence to incite followers, as in the case of a Youtube prankster with millions of followers who was kicked out of a Florida hotel which feared that he would make prank videos during his stay:
+
+https://www.inc.com/chris-matyszczyk/this-5-star-hotel-got-police-to-help-it-kick-out-a-youtube-star-just-because-of-who-he-is.html
+
+
+##### How would you design a system to prevent this kind of abuse?    
+
+There are various methods to detect and prevent such activity.    
+
+Yelp indicates that they have recommendation software which assesses user reviews based upon quality, reliability, and user activity.   Reviews of which Yelp is suspicious are flagged as "not recommended"; the ratings associated with such reviews are not factored into the calculation of the overall score for the business.
+
+https://www.yelp-support.com/article/What-is-Yelp-s-recommendation-software
+
+A system could require users to enter a "CAPCHA" to prevent automated "bots" from spamming fake reviews. However, this may not prevent the entry of fake reviews via "click-farms" located overseas in low-cost regions, for which the cost is relatively inexpensive.
+
+Similar attributes associated with the batch of reviews can be used to detect such activity.  For example, 
+
+* Recently opened user accounts with no prior activity may be suspicious.  
+* User accounts whose collective ratings are extreme outliers when compared across the universe of users may be suspect.
+* Many reviews on a single recipient, entered over a very short period of time from the same (or, similar) IP addresses, may indicate that the user accounts are not independent.
+
+In contrast, a system in which users gradually accumulate  "trust" -- through evaluation by other users -- can be used to ascribe veracity to a user's rating. A system which only allows verified purchasers of a product (e.g., eBay) to submit a rating following a transaction prevents non-purchasing users from entering reviews.  A two-way rating scheme (where buyers and sellers rate each other) discourages nefarious activity.
